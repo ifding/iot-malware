@@ -1,0 +1,1 @@
+#define CONFIG_PLATFORM_LINUX 1

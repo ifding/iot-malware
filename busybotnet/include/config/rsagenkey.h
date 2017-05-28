@@ -1,0 +1,1 @@
+#define CONFIG_RSAGENKEY 1

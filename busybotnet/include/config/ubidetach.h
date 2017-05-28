@@ -1,0 +1,1 @@
+#define CONFIG_UBIDETACH 1

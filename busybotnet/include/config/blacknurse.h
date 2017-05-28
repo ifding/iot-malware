@@ -1,0 +1,1 @@
+#define CONFIG_BLACKNURSE 1

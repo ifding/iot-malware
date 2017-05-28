@@ -1,0 +1,1 @@
+#define CONFIG_UEVENT 1

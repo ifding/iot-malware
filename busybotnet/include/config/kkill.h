@@ -1,0 +1,1 @@
+#define CONFIG_KKILL 1

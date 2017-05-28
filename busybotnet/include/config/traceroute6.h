@@ -1,0 +1,1 @@
+#define CONFIG_TRACEROUTE6 1

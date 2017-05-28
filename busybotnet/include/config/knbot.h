@@ -1,0 +1,1 @@
+#define CONFIG_KNBOT 1

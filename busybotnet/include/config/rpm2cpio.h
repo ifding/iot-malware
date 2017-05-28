@@ -1,0 +1,1 @@
+#define CONFIG_RPM2CPIO 1

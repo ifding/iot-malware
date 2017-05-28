@@ -1,0 +1,1 @@
+#define CONFIG_SYNK4 1

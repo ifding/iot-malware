@@ -1,0 +1,1 @@
+#define CONFIG_FEATURE_NTPD_CONF 1

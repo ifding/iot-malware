@@ -1,0 +1,1 @@
+#define CONFIG_BASE64 1

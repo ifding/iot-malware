@@ -1,0 +1,1 @@
+#define CONFIG_SH_MATH_SUPPORT_64 1

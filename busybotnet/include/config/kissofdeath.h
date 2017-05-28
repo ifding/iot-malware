@@ -1,0 +1,1 @@
+#define CONFIG_KISSOFDEATH 1

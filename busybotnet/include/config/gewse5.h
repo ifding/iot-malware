@@ -1,0 +1,1 @@
+#define CONFIG_GEWSE5 1

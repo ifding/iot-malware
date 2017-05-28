@@ -1,0 +1,1 @@
+#define CONFIG_UNICODE_SUPPORT 1

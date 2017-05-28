@@ -1,0 +1,1 @@
+#undef CONFIG_MKFS_REISER

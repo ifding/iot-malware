@@ -1,0 +1,1 @@
+#define CONFIG_PKSIGN 1

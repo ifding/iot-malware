@@ -1,0 +1,2 @@
+/usr/bin/ar qc libssh_threads.a  CMakeFiles/ssh_threads_static.dir/pthread.c.o
+/usr/bin/ranlib libssh_threads.a

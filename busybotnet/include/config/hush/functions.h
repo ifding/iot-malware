@@ -1,0 +1,1 @@
+#define CONFIG_HUSH_FUNCTIONS 1

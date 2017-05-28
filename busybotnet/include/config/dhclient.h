@@ -1,0 +1,1 @@
+#define CONFIG_DHCLIENT 1

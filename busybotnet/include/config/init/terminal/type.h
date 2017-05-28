@@ -1,0 +1,1 @@
+#define CONFIG_INIT_TERMINAL_TYPE "linux"

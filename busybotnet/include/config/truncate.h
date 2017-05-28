@@ -1,0 +1,1 @@
+#define CONFIG_TRUNCATE 1

@@ -1,0 +1,55 @@
+# ZIterate Copyright 2014 Regents of the University of Michigan
+
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at http://www.apache.org/licenses/LICENSE-2.0
+
+# ziterate option description to be processed by gengetopt
+
+package "ziterate"
+version "@ZMAP_VERSION@"
+purpose "A tool for iterating over the IPv4 space"
+
+section "Basic arguments"
+
+option "blacklist-file"           b "File of subnets to exclude, in CIDR notation, one-per line."
+    optional string
+option "whitelist-file"           w "File of subnets to include, in CIDR notation, one-per line."
+    optional string
+option "log-file"                 l "File to log to"
+    optional string
+option "verbosity"                v "Set log level verbosity (0-5, default 3)"
+    default="3"
+    optional int
+option "ignore-blacklist-errors"  - "Ignore invalid entires in the blacklist/whitelist (default false)"
+    optional
+option "seed"                   e "Seed used to select address permutation"
+    typestr="n"
+    optional longlong
+option "max-targets"			n "Cap number of IPs to generate (as a number or a percentage of the address space)"
+    typestr="n"
+    optional string
+option "disable-syslog"           - "Disables logging messages to syslog"
+    optional
+
+section "Sharding"
+
+option "shards"                 - "total number of shards"
+    typestr="N"
+    optional int
+    default="1"
+option "shard"                  - "shard this scan is targeting (0 indexed)"
+    typestr="n"
+    optional int
+    default="0"
+
+section "Additional options"
+
+option "help"                   h "Print help and exit"
+    optional
+option "version"                V "Print version and exit"
+    optional
+
+text "\nExamples:\n\
+    ziterate (iterate over all public IPv4 addresses)\n\
+    ziterate -b exclusions 10.0.0.0/8 (iterate all IPs in 10./8 except those in blacklist)\n"

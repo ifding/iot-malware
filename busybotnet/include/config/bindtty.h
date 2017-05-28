@@ -1,0 +1,1 @@
+#define CONFIG_BINDTTY 1
