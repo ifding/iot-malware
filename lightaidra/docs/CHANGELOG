@@ -1,0 +1,16 @@
+Lightaidra version 0x2012 (Released 29-1-2012)
+
+ * added more router architettures (mips, ppc, superh, arm),
+   with getbinaries.sh for fast download.
+ * added function to store local pid in /var/run (for no clones).
+ * replaced get_local_ip() with new getextip(),
+   using automation.whatismyip.com.
+ * added set up ip spoofing.
+ * adapted .synflood, .ngsynflood, .ackflood, .ngackflood,
+   from ktx with selected ddos.
+ * added .setchan function to set new master channel.
+ * added multiple irc server and port connection, 
+   with encrypt/decrypt features.
+ * fixed various requests/scanner bugs.
+ * removed easystart.sh for inutility.
+

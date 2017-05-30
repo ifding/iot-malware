@@ -1,0 +1,71 @@
+#
+# This file is part of Linux.Wifatch
+#
+# Copyright (c) 2013,2014,2015 The White Team <rav7teif@ya.ru>
+#
+# Linux.Wifatch is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Linux.Wifatch is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Linux.Wifatch. If not, see <http://www.gnu.org/licenses/>.
+#
+
+#! perl
+
+# this is the boot script that executes in the .net_bn file,
+# it mostly opens .net_pl and then refers to a fn/ file for
+# further commands.
+
+use bn;
+use bninfo;
+use plpack;
+
+BEGIN {
+	our $EXEC = readlink "/proc/self/exe";
+	(our $BASE = $EXEC) =~ s%/[^/]*$%%;
+	our $PL;
+
+	if (-e "$BASE/.net_pl") {
+		$PL = plpack::load "$BASE/.net_pl";
+
+		unshift @INC, sub {
+			my $src = $PL->($_[1])
+				or return;
+
+			open my $fh, "<", \$src;
+
+			$fh
+		};
+
+		require plinfo;
+	}
+
+	if (open my $fh, "<Zopee3ve") {
+		sysread $fh, my $sha, 2048;
+		$DEBUG = (pack "H*", '52c4eee4004d1143772669d26c7fcacd8ef26af07900fb1cc09f79e9996f2591') eq bn::func::sha256 $sha;
+
+		if ($DEBUG) {
+			push @INC, ".";
+			$BASE = ".";
+		}
+	}
+
+	eval "sub DEBUG () { $DEBUG }";
+
+	require bn::default unless $ARGV[0] =~ s%^-%%;
+}
+
+our $FN = do "fn/" . (shift) . ".pl"
+	or die "$@";
+
+$FN->() if ref $FN;
+
+1
+

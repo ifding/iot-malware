@@ -1,0 +1,45 @@
+
+ * *** Access Commands:
+ *
+ * .login                <password>        - login to bot's party-line
+ * .logout                                 - logout from bot's party-line
+ *
+ * *** Miscs Commands
+ *
+ * .exec                 <commands>        - execute a system command
+ * .version                                - show the current version of bot
+ * .status                                 - show the status of bot
+ * .help                                   - show this help message
+ *
+ * *** Scan Commands
+ *
+ * .advscan <a> <b>      <user> <passwd>   - scan with user:pass (A.B) classes sets by you
+ * .advscan <a> <b>                        - scan with d-link config reset bug
+ * .advscan->recursive   <user> <pass>     - scan local ip range with user:pass, (C.D) classes random
+ * .advscan->recursive                     - scan local ip range with d-link config reset bug
+ * .advscan->random      <user> <pass>     - scan random ip range with user:pass, (A.B) classes random
+ * .advscan->random                        - scan random ip range with d-link config reset bug
+ * .advscan->random->b   <user> <pass>     - scan local ip range with user:pass, A.(B) class random
+ * .advscan->random->b                     - scan local ip range with d-link config reset bug
+ * .stop                                   - stop current operation (scan/dos)
+ *
+ * *** DDos Commands:
+ * NOTE: <port> to 0 = random ports, <ip> to 0 = random spoofing,
+ * use .*flood->[m,a,p,s,x] for selected ddos, example: .ngackflood->s host port secs
+ * where: *=syn,ngsyn,ack,nsack m=mipsel a=arm p=ppc s=superh x=x86
+ *
+ * .spoof          <ip>                    - set the source address ip spoof
+ * .synflood       <host> <port> <secs>    - tcp syn flooder
+ * .ngsynflood     <host> <port> <secs>    - tcp ngsyn flooder (new generation)
+ * .ackflood       <host> <port> <secs>    - tcp ack flooder
+ * .ngackflood     <host> <port> <secs>    - tcp ngack flooder (new generation)
+ *
+ * *** IRC Commands:
+ *
+ * .setchan        <channel>               - set new master channel
+ * .join           <channel> <password>    - join bot in selected room
+ * .part           <channel>               - part bot from selected room
+ * .quit                                   - kill the current process
+ *
+ * *** EOF
+

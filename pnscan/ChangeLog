@@ -1,0 +1,26 @@
+2007-10-22  Peter Eriksson <pen@lysator.liu.se>
+
+	* pnscan.c: Fixed coredump when called without arguments. Thanks to
+	  Jose Luis Gonzalez for fixing and Ola Lundqvist for forwarding. 
+
+2002-03-27  Peter Eriksson  <pen@lysator.liu.se>
+
+	* pnscan.c: Some more error checking in get_service() and
+	  when specifying a single port/service as an argument.
+
+	* Print a descriptive string when reading host information from
+	  stdin.
+
+2002-03-27  Henrik Rindlöw <rindlow@lysator.liu.se>
+
+	* Added Tru64 Unix support
+
+2002-03-24  Ola Lundqvist <opal@debian.org>
+
+	* pnscan.sgml Added the other options implemented in pnscan.c.
+	
+2002-03-22  Peter Eriksson  <pen@lysator.liu.se>
+
+	* pnscan.c: Modified the threads startup code to dynamically only
+		    start as many threads as is needed.
+
